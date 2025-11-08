@@ -1,4 +1,3 @@
-// src/pages/ProfileSetup.js
 import React, { useState, useEffect } from "react";
 import { db } from "../firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
@@ -14,13 +13,12 @@ const ProfileSetup = ({ setUserProfile, currentUser, setCurrentPage }) => {
   const [priority, setPriority] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // ✅ Check if profile already exists in Firestore
+  // ✅ Load profile from Firestore if exists
   useEffect(() => {
     const loadProfile = async () => {
       try {
         const docRef = doc(db, "users", currentUser.uid);
         const docSnap = await getDoc(docRef);
-
         if (docSnap.exists()) {
           const data = docSnap.data();
           console.log("🔹 Profile found:", data);
@@ -31,7 +29,6 @@ const ProfileSetup = ({ setUserProfile, currentUser, setCurrentPage }) => {
         console.error("Error loading profile:", err);
       }
     };
-
     if (currentUser) loadProfile();
   }, [currentUser, setUserProfile, setCurrentPage]);
 
@@ -122,43 +119,66 @@ const ProfileSetup = ({ setUserProfile, currentUser, setCurrentPage }) => {
             type="checkbox"
             checked={contactAccess}
             onChange={() => setContactAccess(!contactAccess)}
-            className="w-5 h-5"
+            className="w-5 h-5 accent-purple-600"
           />
         </div>
 
         {/* Emergency Contacts */}
         <div className="border p-4 rounded-lg bg-purple-50">
           <p className="font-semibold text-purple-700 mb-2">Emergency Contacts</p>
-          <div className="flex gap-2 mb-2">
+
+          {/* Stack inputs vertically on small screens */}
+          <div className="flex flex-col sm:flex-row gap-2 mb-2">
             <input
               type="text"
               value={contactName}
               onChange={(e) => setContactName(e.target.value)}
               placeholder="Contact Name"
-              className="flex-1 p-2 border rounded-lg"
+              className="w-full sm:flex-1 p-2 border rounded-lg"
             />
             <input
               type="tel"
               value={contactPhone}
               onChange={(e) => setContactPhone(e.target.value)}
               placeholder="Phone Number"
-              className="flex-1 p-2 border rounded-lg"
+              className="w-full sm:flex-1 p-2 border rounded-lg"
+              inputMode="numeric"
             />
           </div>
+
           <div className="flex items-center gap-2 mb-3">
             <input
               type="checkbox"
               checked={priority}
               onChange={() => setPriority(!priority)}
+              className="accent-purple-600"
             />
             <span className="text-sm">Set as priority contact</span>
           </div>
+
           <button
             onClick={handleAddContact}
             className="w-full bg-purple-600 text-white rounded-lg py-2 font-semibold hover:bg-purple-700 flex items-center justify-center gap-2"
           >
             <Plus className="w-4 h-4" /> Add Contact
           </button>
+
+          {/* Show added contacts */}
+          {contacts.length > 0 && (
+            <ul className="mt-3 space-y-2">
+              {contacts.map((c, i) => (
+                <li
+                  key={i}
+                  className="text-sm text-gray-800 bg-white rounded-lg p-2 border"
+                >
+                  {c.name} - {c.phone}{" "}
+                  {c.priority && (
+                    <span className="text-purple-600 font-semibold">(Priority)</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {/* Save Button */}

@@ -15,7 +15,6 @@ const EmergencyDialPage = () => {
   const [voiceActive, setVoiceActive] = useState(false);
   const [lastShake, setLastShake] = useState(0);
 
-  // Default emergency numbers
   const defaultContacts = [
     { name: "Women Helpline", number: "1091" },
     { name: "Police", number: "100" },
@@ -24,13 +23,11 @@ const EmergencyDialPage = () => {
     { name: "National Emergency", number: "112" },
   ];
 
-  // 🔢 Call handler
   const makeCall = (number) => {
     alert(`📞 Dialing ${number}...`);
     window.location.href = `tel:${number}`;
   };
 
-  // ➕ Add custom contact
   const addCustomContact = () => {
     if (!newName || !newNumber) {
       alert("Please enter both name and number.");
@@ -42,14 +39,12 @@ const EmergencyDialPage = () => {
     setNewNumber("");
   };
 
-  // ❌ Delete custom contact
   const deleteContact = (index) => {
     const updated = [...customContacts];
     updated.splice(index, 1);
     setCustomContacts(updated);
   };
 
-  // 🎙️ Voice Activation Logic
   const startVoiceCommand = () => {
     if (!("webkitSpeechRecognition" in window)) {
       alert("Voice recognition not supported in this browser.");
@@ -83,7 +78,6 @@ const EmergencyDialPage = () => {
     };
   };
 
-  // 📳 Shake Detection Logic
   useEffect(() => {
     const handleMotion = (event) => {
       const { accelerationIncludingGravity } = event;
@@ -106,10 +100,8 @@ const EmergencyDialPage = () => {
     return () => window.removeEventListener("devicemotion", handleMotion);
   }, [lastShake]);
 
-  // 🌍 Get Nearest Help Centers (dummy simulation)
   const [nearbyHelp, setNearbyHelp] = useState([]);
   const findNearbyCenters = () => {
-    // In a real app, you'd call OpenStreetMap API for this
     setNearbyHelp([
       { name: "Mahila Seva Center", type: "Women Safety", distance: "0.8 km" },
       { name: "City Police Station", type: "Police", distance: "1.1 km" },
@@ -128,7 +120,6 @@ const EmergencyDialPage = () => {
         Emergency Dial
       </h2>
 
-      {/* 🔹 Voice + Shake Info */}
       <div className="bg-purple-50 border border-purple-200 p-4 rounded-xl mb-6">
         <p className="text-sm text-gray-700">
           🎙️ Say <b>"Call Police"</b> / <b>"SOS"</b> / <b>"Ambulance"</b> or
@@ -136,7 +127,6 @@ const EmergencyDialPage = () => {
         </p>
       </div>
 
-      {/* 🎙️ Voice Activation Button */}
       <div className="text-center mb-8">
         <button
           onClick={startVoiceCommand}
@@ -151,7 +141,6 @@ const EmergencyDialPage = () => {
         </button>
       </div>
 
-      {/* 📞 Default Emergency Buttons */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
         {defaultContacts.map((contact) => (
           <button
@@ -166,30 +155,31 @@ const EmergencyDialPage = () => {
         ))}
       </div>
 
-      {/* ➕ Custom Contacts Section */}
+      {/* ✅ Fixed layout for mobile responsiveness */}
       <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">
           Your Trusted Contacts
         </h3>
 
-        <div className="flex gap-2 mb-4">
+        {/* Stack on small screens, row on larger */}
+        <div className="flex flex-col sm:flex-row gap-2 mb-4">
           <input
             type="text"
             placeholder="Name"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            className="flex-1 p-2 border rounded-lg focus:ring-2 focus:ring-purple-400"
+            className="w-full sm:flex-1 p-2 border rounded-lg focus:ring-2 focus:ring-purple-400"
           />
           <input
             type="tel"
             placeholder="Phone number"
             value={newNumber}
             onChange={(e) => setNewNumber(e.target.value)}
-            className="flex-1 p-2 border rounded-lg focus:ring-2 focus:ring-purple-400"
+            className="w-full sm:flex-1 p-2 border rounded-lg focus:ring-2 focus:ring-purple-400"
           />
           <button
             onClick={addCustomContact}
-            className="bg-purple-600 text-white rounded-lg px-3 py-2 hover:bg-purple-700 flex items-center gap-1"
+            className="w-full sm:w-auto bg-purple-600 text-white rounded-lg px-4 py-2 hover:bg-purple-700 flex items-center justify-center gap-1"
           >
             <PlusCircle className="w-5 h-5" />
             Add
@@ -231,7 +221,6 @@ const EmergencyDialPage = () => {
         )}
       </div>
 
-      {/* 🏥 Nearby Help Centers */}
       <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">
           Nearby Help Centers
@@ -254,7 +243,6 @@ const EmergencyDialPage = () => {
         </ul>
       </div>
 
-      {/* 🚨 SOS Quick Call */}
       <div className="text-center mt-8">
         <button
           onClick={() => makeCall("112")}

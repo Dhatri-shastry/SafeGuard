@@ -75,25 +75,33 @@ const LiveTrackingPage = ({ currentUser }) => {
 
   // 🔹 Send WhatsApp messages to all priority contacts
   const sendWhatsApp = (coords) => {
-    const priorityContacts = contacts.filter(
-      (c) => c && (c.priority === true || c.priority === "true" || c.priority)
-    );
-    if (priorityContacts.length === 0) {
-      console.warn("No priority contacts found to receive live updates.");
-      return;
+  const priorityContacts = contacts.filter(
+    (c) => c && (c.priority === true || c.priority === "true" || c.priority)
+  );
+  if (priorityContacts.length === 0) {
+    console.warn("No priority contacts found to receive live updates.");
+    return;
+  }
+
+  const msg = encodeURIComponent(
+    `🚨 *Live SOS Location Update from SafeGuard*\n\n📍 My current location:\nhttps://www.google.com/maps?q=${coords.lat},${coords.lng}\n\nThis message updates automatically every 30 seconds. Stay connected. 💜`
+  );
+
+  priorityContacts.forEach((contact) => {
+    let phone = (contact.phone || "").replace(/\D/g, ""); // remove non-digits
+
+    // ✅ Add country code if missing
+    if (phone.startsWith("0")) {
+      phone = phone.substring(1); // remove starting 0
+    }
+    if (!phone.startsWith("91")) {
+      phone = "91" + phone; // default to India
     }
 
-    const msg = encodeURIComponent(
-      `🚨 *Live SOS Location Update from SafeGuard*\n\n📍 My current location:\nhttps://www.google.com/maps?q=${coords.lat},${coords.lng}\n\nThis message updates automatically every 30 seconds. Stay connected. 💜`
-    );
-
-    priorityContacts.forEach((contact) => {
-      const phone = (contact.phone || "").replace(/\D/g, "");
-      if (!phone) return;
-      const link = `https://wa.me/${phone}?text=${msg}`;
-      window.open(link, "_blank");
-    });
-  };
+    const link = `https://wa.me/${phone}?text=${msg}`;
+    window.open(link, "_blank");
+  });
+};
 
   // 🔹 Cleanup intervals & watchers
   useEffect(() => {
