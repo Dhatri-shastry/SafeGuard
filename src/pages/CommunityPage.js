@@ -1,4 +1,16 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  query,
+  orderBy,
+  updateDoc,
+  doc,
+  increment,
+  serverTimestamp,
+} from "firebase/firestore";
+import { db } from "../firebase";
 import {
   Shield,
   MapPin,
@@ -9,31 +21,28 @@ import {
 } from "lucide-react";
 
 const CommunityPage = ({ userProfile }) => {
-  // Initial demo posts
-  const [posts, setPosts] = useState([
-    {
-      id: 1,
-      name: "Sarah",
-      message: "⚠️ Spotted suspicious activity near Central Park. Stay alert!",
-      location: "Central Park Area",
-      reactions: { safe: 5, alert: 12, support: 8 },
-      isAnonymous: false,
-    },
-    {
-      id: 2,
-      name: "Anonymous",
-      message: "The streetlights on Oak Avenue are not working. Better avoid this route at night.",
-      location: "Oak Avenue",
-      reactions: { safe: 0, alert: 15, support: 3 },
-      isAnonymous: true,
-    }
-  ]);
+  const [posts, setPosts] = useState([]);
   const [newPost, setNewPost] = useState("");
   const [isAnonymous, setIsAnonymous] = useState(true);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Load posts in real time
+  useEffect(() => {
+    const postsRef = collection(db, "community_posts");
+    const q = query(postsRef, orderBy("createdAt", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetched = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setPosts(fetched);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Add a new post
-  const addPost = () => {
+  const addPost = async () => {
     if (!newPost.trim()) {
       alert("⚠️ Please write something before posting.");
       return;
@@ -41,33 +50,22 @@ const CommunityPage = ({ userProfile }) => {
 
     const location = "Your current location"; // replace later with GPS data
     const post = {
-      id: Date.now(),
       name: isAnonymous ? "Anonymous" : userProfile?.name || "User",
       message: newPost,
       location,
       reactions: { safe: 0, alert: 0, support: 0 },
       isAnonymous,
-      createdAt: new Date().toISOString(),
+      createdAt: serverTimestamp(),
     };
 
-    setPosts([post, ...posts]);
+    await addDoc(collection(db, "community_posts"), post);
     setNewPost("");
   };
 
   // Add reactions
-  const handleReaction = (id, type) => {
-    setPosts(posts.map(post => {
-      if (post.id === id) {
-        return {
-          ...post,
-          reactions: {
-            ...post.reactions,
-            [type]: (post.reactions[type] || 0) + 1
-          }
-        };
-      }
-      return post;
-    }));
+  const handleReaction = async (id, type) => {
+    const postRef = doc(db, "community_posts", id);
+    await updateDoc(postRef, { [`reactions.${type}`]: increment(1) });
   };
 
   return (

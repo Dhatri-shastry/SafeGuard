@@ -1,171 +1,174 @@
-import React, { useState } from 'react';
-import { MapPin, Phone, Users, X, User } from 'lucide-react';
+// src/pages/ProfileSetup.js
+import React, { useState, useEffect } from "react";
+import { db } from "../firebase";
+import { doc, setDoc, getDoc } from "firebase/firestore";
+import { MapPin, Phone, Plus } from "lucide-react";
 
-const ProfileSetup = ({ setUserProfile, setCurrentPage }) => {
-  const [name, setName] = useState('');
-  const [locationPermission, setLocationPermission] = useState(false);
-  const [contactsPermission, setContactsPermission] = useState(false);
-  const [emergencyContacts, setEmergencyContacts] = useState([]);
-  const [newContact, setNewContact] = useState({ name: '', phone: '', priority: false });
+const ProfileSetup = ({ setUserProfile, currentUser, setCurrentPage }) => {
+  const [name, setName] = useState("");
+  const [contacts, setContacts] = useState([]);
+  const [locationAccess, setLocationAccess] = useState(false);
+  const [contactAccess, setContactAccess] = useState(false);
+  const [contactName, setContactName] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [priority, setPriority] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const requestLocationPermission = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        () => {
-          setLocationPermission(true);
-          alert('Location access granted!');
-        },
-        () => {
-          alert('Location access denied. Please enable it in your browser settings.');
+  // ✅ Check if profile already exists in Firestore
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const docRef = doc(db, "users", currentUser.uid);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          console.log("🔹 Profile found:", data);
+          setUserProfile(data);
+          setCurrentPage("home");
         }
-      );
-    }
-  };
+      } catch (err) {
+        console.error("Error loading profile:", err);
+      }
+    };
+
+    if (currentUser) loadProfile();
+  }, [currentUser, setUserProfile, setCurrentPage]);
 
   const handleAddContact = () => {
-    if (newContact.name && newContact.phone) {
-      setEmergencyContacts([...emergencyContacts, { ...newContact, id: Date.now() }]);
-      setNewContact({ name: '', phone: '', priority: false });
-    }
+    if (!contactName || !contactPhone) return;
+    setContacts([...contacts, { name: contactName, phone: contactPhone, priority }]);
+    setContactName("");
+    setContactPhone("");
+    setPriority(false);
   };
 
-  const removeContact = (id) => {
-    setEmergencyContacts(emergencyContacts.filter(c => c.id !== id));
-  };
-
-  const handleComplete = () => {
+  const handleSaveProfile = async () => {
     if (!name) {
-      alert('Please enter your name');
+      alert("Please enter your name.");
       return;
     }
-    setUserProfile({
-      name,
-      locationPermission,
-      contactsPermission,
-      emergencyContacts
-    });
-    setCurrentPage('home');
+
+    setLoading(true);
+    try {
+      const profileData = {
+        name,
+        locationAccess,
+        contactAccess,
+        emergencyContacts: contacts,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await setDoc(doc(db, "users", currentUser.uid), profileData);
+      setUserProfile(profileData);
+      alert("✅ Profile saved successfully!");
+      setCurrentPage("home");
+    } catch (error) {
+      console.error("Error saving profile:", error);
+      alert("Error saving profile, please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4">
-      <div className="max-w-2xl mx-auto pt-8">
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Complete Your Profile</h2>
-          <p className="text-gray-600 mb-6">Set up your safety preferences</p>
+    <div className="max-w-2xl mx-auto px-4 py-8">
+      <h2 className="text-3xl font-bold text-gray-800 mb-4">Complete Your Profile</h2>
+      <p className="text-gray-600 mb-6">Set up your safety preferences</p>
 
-          {/* Name input */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Your Name *</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-              placeholder="Enter your name"
-            />
-          </div>
+      <div className="space-y-4 bg-white shadow-lg p-6 rounded-2xl">
+        {/* Name */}
+        <div>
+          <label className="block text-sm font-semibold mb-2">Your Name *</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Enter your name"
+            className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-purple-400"
+          />
+        </div>
 
-          {/* Location & Contacts Permissions */}
-          <div className="space-y-4 mb-6">
-            <div className="p-4 border-2 border-gray-300 rounded-lg flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <MapPin className="w-5 h-5 text-purple-600" />
-                <div>
-                  <div className="font-medium text-gray-800">Location Access</div>
-                  <div className="text-sm text-gray-600">Required for tracking and emergency features</div>
-                </div>
-              </div>
-              <button
-                onClick={requestLocationPermission}
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                  locationPermission 
-                    ? 'bg-green-100 text-green-700' 
-                    : 'bg-purple-600 text-white hover:bg-purple-700'
-                }`}
-              >
-                {locationPermission ? '✓ Enabled' : 'Enable'}
-              </button>
-            </div>
-
-            <div className="p-4 border-2 border-gray-300 rounded-lg flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <Phone className="w-5 h-5 text-purple-600" />
-                <div>
-                  <div className="font-medium text-gray-800">Contacts Access</div>
-                  <div className="text-sm text-gray-600">Quick add emergency contacts</div>
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={contactsPermission}
-                onChange={(e) => setContactsPermission(e.target.checked)}
-                className="w-5 h-5 accent-purple-600"
-              />
+        {/* Location Access */}
+        <div className="flex items-center justify-between border p-3 rounded-lg">
+          <div className="flex items-center gap-3">
+            <MapPin className="text-purple-600" />
+            <div>
+              <p className="font-medium">Location Access</p>
+              <p className="text-sm text-gray-500">
+                Required for tracking and emergency features
+              </p>
             </div>
           </div>
-
-          {/* Emergency Contacts Section */}
-          <div className="mb-8">
-            <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-              <Users className="w-5 h-5 text-purple-600" />
-              Emergency Contacts
-            </h3>
-
-            {emergencyContacts.map((contact) => (
-              <div key={contact.id} className="flex justify-between items-center bg-gray-50 p-3 mb-2 rounded-lg">
-                <div>
-                  <div className="font-medium text-gray-800">{contact.name}</div>
-                  <div className="text-sm text-gray-600">{contact.phone}</div>
-                </div>
-                <button onClick={() => removeContact(contact.id)}>
-                  <X className="w-5 h-5 text-red-600" />
-                </button>
-              </div>
-            ))}
-
-            <div className="bg-purple-50 border-2 border-purple-200 p-4 rounded-lg">
-              <input
-                type="text"
-                value={newContact.name}
-                onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
-                className="w-full mb-2 px-3 py-2 border border-gray-300 rounded-lg"
-                placeholder="Contact Name"
-              />
-              <input
-                type="tel"
-                value={newContact.phone}
-                onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
-                className="w-full mb-2 px-3 py-2 border border-gray-300 rounded-lg"
-                placeholder="Phone Number"
-              />
-              <label className="flex items-center gap-2 mb-2">
-                <input
-                  type="checkbox"
-                  checked={newContact.priority}
-                  onChange={(e) => setNewContact({ ...newContact, priority: e.target.checked })}
-                  className="w-4 h-4 text-purple-600"
-                />
-                <span className="text-sm text-gray-700">Set as priority contact</span>
-              </label>
-              <button
-                onClick={handleAddContact}
-                className="w-full py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center justify-center gap-2"
-              >
-                <User className="w-4 h-4" />
-                Add Contact
-              </button>
-            </div>
-          </div>
-
-          {/* Complete Button */}
           <button
-            onClick={handleComplete}
-            className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold text-lg hover:from-purple-700 hover:to-pink-700 shadow-lg"
+            onClick={() => setLocationAccess(!locationAccess)}
+            className={`px-4 py-2 rounded-lg text-white ${
+              locationAccess ? "bg-green-600" : "bg-purple-600"
+            }`}
           >
-            Complete Setup & Get Started
+            {locationAccess ? "Enabled" : "Enable"}
           </button>
         </div>
+
+        {/* Contacts Access */}
+        <div className="flex items-center justify-between border p-3 rounded-lg">
+          <div className="flex items-center gap-3">
+            <Phone className="text-purple-600" />
+            <div>
+              <p className="font-medium">Contacts Access</p>
+              <p className="text-sm text-gray-500">Quick add emergency contacts</p>
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={contactAccess}
+            onChange={() => setContactAccess(!contactAccess)}
+            className="w-5 h-5"
+          />
+        </div>
+
+        {/* Emergency Contacts */}
+        <div className="border p-4 rounded-lg bg-purple-50">
+          <p className="font-semibold text-purple-700 mb-2">Emergency Contacts</p>
+          <div className="flex gap-2 mb-2">
+            <input
+              type="text"
+              value={contactName}
+              onChange={(e) => setContactName(e.target.value)}
+              placeholder="Contact Name"
+              className="flex-1 p-2 border rounded-lg"
+            />
+            <input
+              type="tel"
+              value={contactPhone}
+              onChange={(e) => setContactPhone(e.target.value)}
+              placeholder="Phone Number"
+              className="flex-1 p-2 border rounded-lg"
+            />
+          </div>
+          <div className="flex items-center gap-2 mb-3">
+            <input
+              type="checkbox"
+              checked={priority}
+              onChange={() => setPriority(!priority)}
+            />
+            <span className="text-sm">Set as priority contact</span>
+          </div>
+          <button
+            onClick={handleAddContact}
+            className="w-full bg-purple-600 text-white rounded-lg py-2 font-semibold hover:bg-purple-700 flex items-center justify-center gap-2"
+          >
+            <Plus className="w-4 h-4" /> Add Contact
+          </button>
+        </div>
+
+        {/* Save Button */}
+        <button
+          onClick={handleSaveProfile}
+          disabled={loading}
+          className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 mt-4"
+        >
+          {loading ? "Saving..." : "Save Profile"}
+        </button>
       </div>
     </div>
   );

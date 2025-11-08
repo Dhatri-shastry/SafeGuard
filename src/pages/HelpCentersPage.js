@@ -1,265 +1,280 @@
-import React, { useEffect, useState } from 'react';
-import { MapPin, Phone, Navigation, Shield, Building2, Ambulance } from 'lucide-react';
+import React, { useState, useEffect, useRef } from "react";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  Circle,
+  useMap,
+} from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
+import L from "leaflet";
+import "leaflet-routing-machine";
 
-// Haversine distance (km)
-const haversineKm = (lat1, lon1, lat2, lon2) => {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
+// Icons
+const userIcon = new L.Icon({
+  iconUrl: "https://cdn-icons-png.flaticon.com/512/149/149071.png",
+  iconSize: [38, 38],
+});
 
-// Returns Overpass QL to search amenities within radius (meters)
-const buildOverpassQuery = (lat, lon, radiusMeters = 3000) => {
-  // We'll search for nodes/ways/relations with amenity tags we care about
-  // police, hospital, fire_station, clinic, social_facility
-  return `
-    [out:json][timeout:25];
-    (
-      node["amenity"~"police|hospital|fire_station|clinic|social_facility"](around:${radiusMeters},${lat},${lon});
-      way["amenity"~"police|hospital|fire_station|clinic|social_facility"](around:${radiusMeters},${lat},${lon});
-      relation["amenity"~"police|hospital|fire_station|clinic|social_facility"](around:${radiusMeters},${lat},${lon});
-    );
-    out center meta;
-  `;
-};
+const hospitalIcon = new L.Icon({
+  iconUrl: "https://cdn-icons-png.flaticon.com/512/2967/2967351.png",
+  iconSize: [32, 32],
+});
 
-const HelpCentersOSM = () => {
-  const [location, setLocation] = useState(null);
-  const [centers, setCenters] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [radius, setRadius] = useState(3000); // meters
+const policeIcon = new L.Icon({
+  iconUrl: "https://cdn-icons-png.flaticon.com/512/2991/2991101.png",
+  iconSize: [32, 32],
+});
 
+const ngoIcon = new L.Icon({
+  iconUrl: "https://cdn-icons-png.flaticon.com/512/3448/3448335.png",
+  iconSize: [32, 32],
+});
+
+const HelpCentersPage = () => {
+  const [position, setPosition] = useState(null);
+  const [helpCenters, setHelpCenters] = useState([]);
+  const [selectedCenter, setSelectedCenter] = useState(null);
+  const routingControlRef = useRef(null);
+
+  // Get location
   useEffect(() => {
-    // Get user's live location
-    if (!navigator.geolocation) {
-      setError('Geolocation not supported in this browser.');
-      setLoading(false);
-      return;
-    }
-
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-        setLocation(coords);
-        fetchNearby(coords.lat, coords.lon, radius);
+        const coords = [pos.coords.latitude, pos.coords.longitude];
+        setPosition(coords);
+        fetchHelpCenters(coords);
       },
       (err) => {
-        console.error(err);
-        setError('Location access denied. Please enable location/GPS.');
-        setLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
+        console.error("Location error:", err);
+        alert("Please enable location access to view nearby help centers.");
+      }
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch from Overpass
-  const fetchNearby = async (lat, lon, radiusMeters = 3000) => {
-    setLoading(true);
-    setError('');
-    setCenters([]);
+  // Fetch help centers using Overpass API
+  const fetchHelpCenters = async ([lat, lon]) => {
+    const query = `
+      [out:json];
+      (
+        node["amenity"="police"](around:5000,${lat},${lon});
+        node["amenity"="hospital"](around:5000,${lat},${lon});
+        node["amenity"="social_facility"](around:5000,${lat},${lon});
+      );
+      out center;
+    `;
 
-    const query = buildOverpassQuery(lat, lon, radiusMeters);
-    const endpoint = 'https://overpass-api.de/api/interpreter';
     try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-        body: new URLSearchParams({ data: query }).toString()
+      const response = await fetch("https://overpass-api.de/api/interpreter", {
+        method: "POST",
+        body: query,
       });
-
-      if (!res.ok) {
-        throw new Error(`Overpass error: ${res.status}`);
-      }
-
-      const data = await res.json();
-
-      // Overpass returns elements: nodes/ways/relations. For ways/relations, geometry center is in .center
-      const places = data.elements
-        .map((el) => {
-          const latEl = el.lat ?? el.center?.lat;
-          const lonEl = el.lon ?? el.center?.lon;
-          if (!latEl || !lonEl) return null;
-
-          // Determine type with priority
-          const tags = el.tags || {};
-          const amen = tags.amenity || tags.shop || tags.office || 'help';
-          const type =
-            amen.includes('police') ? 'Police Station' :
-            amen.includes('hospital') ? 'Hospital' :
-            amen.includes('fire_station') ? 'Fire Station' :
-            amen.includes('clinic') ? 'Clinic' :
-            amen.includes('social_facility') ? 'Social Facility' :
-            'Help Center';
-
-          return {
-            id: `${el.type}/${el.id}`,
-            name: tags.name || (type === 'Police Station' ? 'Police Station' : 'Help Center'),
-            address: tags['addr:full'] || tags['addr:street'] || tags.vicinity || tags['contact:phone'] || '',
-            lat: Number(latEl),
-            lon: Number(lonEl),
-            type,
-            phone: tags['phone'] || tags['contact:phone'] || '',
-            distanceKm: haversineKm(lat, lon, Number(latEl), Number(lonEl))
-          };
-        })
-        .filter(Boolean)
-        // unique by id (Overpass may return duplicates)
-        .reduce((acc, cur) => {
-          if (!acc.find((x) => x.id === cur.id)) acc.push(cur);
-          return acc;
-        }, [])
-        .sort((a, b) => a.distanceKm - b.distanceKm);
-
-      setCenters(places);
-    } catch (err) {
-      console.error('Overpass fetch error', err);
-      setError('Failed to fetch nearby help centers. Try again (rate limits may apply).');
-    } finally {
-      setLoading(false);
+      const data = await response.json();
+      const centers = data.elements.map((el) => ({
+        id: el.id,
+        lat: el.lat,
+        lon: el.lon,
+        name: el.tags.name || "Unnamed Center",
+        type: el.tags.amenity,
+        distance: calculateDistance(lat, lon, el.lat, el.lon),
+      }));
+      centers.sort((a, b) => a.distance - b.distance);
+      setHelpCenters(centers);
+    } catch (error) {
+      console.error("Error fetching help centers:", error);
     }
   };
 
-  const handleRefresh = () => {
-    if (!location) return;
-    fetchNearby(location.lat, location.lon, radius);
+  // Distance calculator
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return (R * c).toFixed(2);
   };
 
-  if (loading)
-    return (
-      <div className="flex items-center justify-center h-64 text-gray-600">
-        Fetching nearby help centers...
-      </div>
-    );
+  // ✅ Safe Routing handler (no more removeLayer errors)
+  const Routing = ({ from, to }) => {
+    const map = useMap();
 
-  if (error)
-    return (
-      <div className="p-6 text-center text-red-600">
-        {error} <br />
-        <button onClick={() => window.location.reload()} className="mt-3 px-4 py-2 bg-gray-100 rounded">Reload</button>
-      </div>
-    );
+    useEffect(() => {
+      if (!from || !to || !map) return;
+
+      // Clear existing route safely
+      if (routingControlRef.current) {
+        try {
+          routingControlRef.current.getPlan()?.setWaypoints([]);
+          map.removeControl(routingControlRef.current);
+        } catch (err) {
+          console.warn("Safe cleanup:", err.message);
+        }
+        routingControlRef.current = null;
+      }
+
+      // Create new route
+      const control = L.Routing.control({
+        waypoints: [L.latLng(from[0], from[1]), L.latLng(to[0], to[1])],
+        routeWhileDragging: false,
+        addWaypoints: false,
+        draggableWaypoints: false,
+        show: false,
+        lineOptions: {
+          styles: [{ color: "#8b5cf6", weight: 5, opacity: 0.8 }],
+        },
+        createMarker: () => null,
+        router: new L.Routing.OSRMv1({
+          serviceUrl: "https://router.project-osrm.org/route/v1",
+        }),
+      }).addTo(map);
+
+      routingControlRef.current = control;
+
+      // Safe cleanup
+      return () => {
+        if (routingControlRef.current) {
+          try {
+            routingControlRef.current.getPlan()?.setWaypoints([]);
+            map.removeControl(routingControlRef.current);
+          } catch (err) {
+            console.warn("Cleanup skipped:", err.message);
+          }
+          routingControlRef.current = null;
+        }
+      };
+    }, [from, to, map]);
+
+    return null;
+  };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6">
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-            <Shield className="w-6 h-6 text-purple-600" />
-            Nearby Help Centers (OpenStreetMap)
-          </h2>
-          {location && (
-            <div className="text-sm text-gray-600 mt-1">
-              <MapPin className="inline-block w-4 h-4 text-purple-600 mr-1" />
-              Your location: {location.lat.toFixed(5)}, {location.lon.toFixed(5)}
-            </div>
-          )}
-        </div>
+    <div
+      className="min-h-screen bg-gradient-to-br from-purple-100 via-pink-100 to-blue-100 p-4"
+      style={{ fontFamily: "Poppins, sans-serif" }}
+    >
+      {position ? (
+        <>
+          {/* Map Section */}
+          <div className="rounded-3xl overflow-hidden shadow-2xl border border-white/20 backdrop-blur-xl">
+            <MapContainer
+              center={position}
+              zoom={14}
+              style={{ height: "60vh", width: "100%" }}
+            >
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; OpenStreetMap contributors'
+              />
+              <Marker position={position} icon={userIcon}>
+                <Popup>You are here</Popup>
+              </Marker>
+              <Circle center={position} radius={1000} color="#6d28d9" />
 
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Radius (m)</label>
-          <input
-            type="number"
-            value={radius}
-            onChange={(e) => setRadius(Number(e.target.value))}
-            className="w-20 px-2 py-1 border rounded"
-          />
-          <button onClick={handleRefresh} className="px-3 py-1 bg-purple-600 text-white rounded">Refresh</button>
-        </div>
-      </div>
-
-      {centers.length === 0 ? (
-        <div className="p-6 bg-yellow-50 rounded">No help centers found in this radius. Try increasing radius or refresh.</div>
-      ) : (
-        <div className="grid md:grid-cols-2 gap-4">
-          {centers.map((c) => (
-            <div key={c.id} className="bg-white rounded-lg shadow p-4">
-              <div className="flex items-start gap-3">
-                <div className="w-12 h-12 rounded bg-gray-100 flex items-center justify-center">
-                  {c.type.includes('Police') ? <Shield className="w-6 h-6 text-blue-600" /> :
-                   c.type.includes('Hospital') ? <Ambulance className="w-6 h-6 text-red-600" /> :
-                   <Building2 className="w-6 h-6 text-green-600" />}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-semibold text-gray-800">{c.name}</div>
-                      <div className="text-sm text-gray-500">{c.address || 'Address not available'}</div>
+              {helpCenters.map((center) => (
+                <Marker
+                  key={center.id}
+                  position={[center.lat, center.lon]}
+                  icon={
+                    center.type === "hospital"
+                      ? hospitalIcon
+                      : center.type === "police"
+                      ? policeIcon
+                      : ngoIcon
+                  }
+                >
+                  <Popup>
+                    <div className="text-sm font-semibold text-purple-700">
+                      {center.name}
                     </div>
-                    <div className="text-sm text-gray-600">{(c.distanceKm).toFixed(2)} km</div>
-                  </div>
-
-                  <div className="mt-3 flex gap-2">
-                    <a
-                      className="flex-1 py-2 bg-green-600 text-white rounded text-center text-sm"
-                      href={c.phone ? `tel:${c.phone}` : `tel:`}
-                      onClick={(e) => {
-                        if (!c.phone) {
-                          e.preventDefault();
-                          alert('Phone number not available for this place.');
-                        }
-                      }}
-                    >
-                      <Phone className="inline-block w-4 h-4 mr-2" /> Call
-                    </a>
-
-                    <a
-                      className="flex-1 py-2 bg-blue-600 text-white rounded text-center text-sm"
-                      href={`https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${location.lat}%2C${location.lon}%3B${c.lat}%2C${c.lon}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <Navigation className="inline-block w-4 h-4 mr-2" /> Navigate
-                    </a>
+                    <div className="text-xs text-gray-600">
+                      Type: {center.type}
+                      <br />
+                      Distance: {center.distance} km
+                    </div>
 
                     <button
-                      className="px-3 py-2 bg-gray-100 rounded text-sm"
-                      onClick={() => {
-                        // open OSM place page in new tab
-                        const osmTypeId = c.id; // e.g., node/12345 or way/6789
-                        const [type, id] = osmTypeId.split('/');
-                        const url = `https://www.openstreetmap.org/${type}/${id}`;
-                        window.open(url, '_blank');
-                      }}
+                      onClick={() => setSelectedCenter(center)}
+                      className="mt-2 px-3 py-1 text-xs bg-purple-600 text-white rounded-md hover:bg-purple-700 transition"
                     >
-                      View on OSM
+                      🚗 Navigate
                     </button>
-                  </div>
-                </div>
-              </div>
+
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${center.lat},${center.lon}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 block text-center px-3 py-1 text-xs bg-green-600 text-white rounded-md hover:bg-green-700 transition"
+                    >
+                      Open in Google Maps
+                    </a>
+                  </Popup>
+                </Marker>
+              ))}
+
+              {selectedCenter && (
+                <Routing
+                  from={position}
+                  to={[selectedCenter.lat, selectedCenter.lon]}
+                />
+              )}
+            </MapContainer>
+          </div>
+
+          {/* ✅ Clear Route Button */}
+          {selectedCenter && (
+            <div className="text-center mt-5">
+              <button
+                onClick={() => setSelectedCenter(null)}
+                className="px-6 py-2 bg-white/30 backdrop-blur-md text-purple-800 font-semibold rounded-2xl shadow-md border border-white/40 hover:bg-white/50 transition-all"
+              >
+                ❌ Clear Route
+              </button>
             </div>
-          ))}
+          )}
+
+          {/* Info Panel */}
+          <div className="mt-6 bg-white/30 backdrop-blur-lg rounded-2xl p-5 shadow-xl border border-white/40">
+            <h2 className="text-2xl font-bold text-purple-800 mb-4">
+              🏥 Nearby Help Centers
+            </h2>
+            {helpCenters.length > 0 ? (
+              <ul className="space-y-3 overflow-y-auto max-h-[40vh] pr-2 scrollbar-thin scrollbar-thumb-purple-400 scrollbar-track-transparent">
+                {helpCenters.map((center, index) => (
+                  <li
+                    key={center.id}
+                    onClick={() => setSelectedCenter(center)}
+                    className="p-4 rounded-xl bg-white/50 cursor-pointer hover:bg-purple-100 border border-white/40 transition-all"
+                  >
+                    <div className="font-semibold text-gray-800">
+                      {index + 1}. {center.name}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {center.type.charAt(0).toUpperCase() +
+                        center.type.slice(1)}{" "}
+                      — {center.distance} km away
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-600 italic">Fetching nearby centers...</p>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="flex justify-center items-center h-screen text-purple-700 font-semibold text-lg">
+          🔍 Detecting your location...
         </div>
       )}
-
-      <div className="mt-6 text-xs text-gray-500">
-        Data from OpenStreetMap contributors. Powered by Overpass API. Please respect Overpass rate limits (public endpoints may throttle).
-      </div>
-
-      <div className="mt-4">
-        {/* Simple OSM embed showing user marker centered (no marker pin library) */}
-        {location && (
-          <div className="mt-4 border rounded overflow-hidden">
-            <iframe
-              title="osm-map"
-              width="100%"
-              height="360"
-              frameBorder="0"
-              src={`https://www.openstreetmap.org/export/embed.html?bbox=${location.lon-0.03}%2C${location.lat-0.015}%2C${location.lon+0.03}%2C${location.lat+0.015}&layer=mapnik&marker=${location.lat}%2C${location.lon}`}
-            />
-            <div className="p-2 text-xs text-gray-600">Map: OpenStreetMap — your location in center</div>
-          </div>
-        )}
-      </div>
     </div>
   );
 };
 
-export default HelpCentersOSM;
+export default HelpCentersPage;

@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
 import { Shield } from 'lucide-react';
-import mockFirebase from '../firebase/mockFirebase'; // ✅ make sure this path is correct
+import { auth, googleProvider } from "../firebase";
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signInWithPopup,
+} from "firebase/auth";
 
 const AuthPages = ({ setCurrentUser, setCurrentPage }) => {
   const [mode, setMode] = useState('login');
@@ -9,45 +15,45 @@ const AuthPages = ({ setCurrentUser, setCurrentPage }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    
-    try {
-      if (mode === 'login') {
-        const result = await mockFirebase.signIn(email, password);
-        setCurrentUser(result.user);
-        setCurrentPage('home');
-      } else if (mode === 'signup') {
-        const result = await mockFirebase.signUp(email, password);
-        setCurrentUser(result.user);
-        setCurrentPage('home');
-      } else if (mode === 'forgot') {
-        await mockFirebase.resetPassword(email);
-        setError('Password reset email sent!');
-        setMode('login');
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const result = await mockFirebase.signInWithGoogle();
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setLoading(true);
+  setError('');
+  
+  try {
+    if (mode === "login") {
+      const result = await signInWithEmailAndPassword(auth, email, password);
       setCurrentUser(result.user);
-      setCurrentPage('home');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      setCurrentPage("home");
+    } else if (mode === "signup") {
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      setCurrentUser(result.user);
+      setCurrentPage("home");
+    } else if (mode === "forgot") {
+      await sendPasswordResetEmail(auth, email);
+      setError("Password reset email sent!");
+      setMode("login");
     }
-  };
+  } catch (err) {
+    setError(err.message || 'An error occurred');
+  } finally {
+    setLoading(false);
+  }
+};
+
+const handleGoogleSignIn = async () => {
+  setLoading(true);
+  setError('');
+  try {
+   const result = await signInWithPopup(auth, googleProvider);
+    setCurrentUser(result.user);
+    setCurrentPage('home');
+  } catch (err) {
+    setError(err.message || 'Google sign-in failed');
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center p-4">
