@@ -7,6 +7,7 @@ const SOSPage = ({ userProfile }) => {
   const [location, setLocation] = useState(null);
   const [readyToSend, setReadyToSend] = useState(false);
   const pressTimerRef = useRef(null);
+  const audioRef = useRef(null); // 🎵 reference for SOS sound
 
   // 🧭 Get location once SOS starts
   useEffect(() => {
@@ -38,6 +39,24 @@ const SOSPage = ({ userProfile }) => {
     }
   }, [sosActive, countdown]);
 
+  // 🚨 Play SOS Sound when activated
+  useEffect(() => {
+    if (sosActive) {
+      try {
+        audioRef.current?.play().catch(() => {
+          console.warn("Autoplay blocked. User interaction needed.");
+        });
+      } catch (err) {
+        console.error("Error playing sound:", err);
+      }
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0; // reset sound
+      }
+    }
+  }, [sosActive]);
+
   // 🚨 Function to send WhatsApp message
   const sendViaWhatsApp = () => {
     const contacts = userProfile?.emergencyContacts?.filter((c) => c.priority) || [];
@@ -53,7 +72,6 @@ const SOSPage = ({ userProfile }) => {
         `Please respond immediately!`
     );
 
-    // ✅ Open WhatsApp for each contact on button click
     contacts.forEach((contact, i) => {
       const phone = contact.phone.replace(/\D/g, "");
       setTimeout(() => {
@@ -93,6 +111,9 @@ const SOSPage = ({ userProfile }) => {
       <p className="text-gray-700 mb-8 text-center">
         Hold the <b>SOS</b> button for 3 seconds to activate an alert.
       </p>
+
+      {/* 🎵 SOS Alarm Sound */}
+      <audio ref={audioRef} src="/sos-alarm.mp3" loop preload="auto" />
 
       {/* SOS Button */}
       <button

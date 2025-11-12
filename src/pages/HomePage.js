@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import { storage, db } from "../firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   AlertCircle,
   MapPin,
@@ -13,22 +15,64 @@ import {
   Trash,
   Star,
 } from "lucide-react";
-import { db } from "../firebase";
 import {
   collection,
   addDoc,
   getDocs,
   deleteDoc,
   doc,
+  getDoc,
+  updateDoc,
 } from "firebase/firestore";
 
-const HomePage = ({ currentUser, setCurrentPage }) => {
+const HomePage = ({ currentUser, setCurrentPage, userProfile }) => {
   const [contacts, setContacts] = useState([]);
   const [newContact, setNewContact] = useState({
     name: "",
     phone: "",
     priority: false,
   });
+  const [profilePic, setProfilePic] = useState("");
+
+  // ✅ Instantly use profile data if passed from App.js
+  useEffect(() => {
+    if (userProfile && userProfile.profilePic) {
+      setProfilePic(userProfile.profilePic);
+    }
+  }, [userProfile]);
+
+  // ✅ Fetch saved Base64 image from Firestore on reload
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!currentUser) return;
+      const docRef = doc(db, "users", currentUser.uid);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.profilePic) setProfilePic(data.profilePic);
+      }
+    };
+    fetchProfile();
+  }, [currentUser]);
+
+  // ✅ Replace picture
+  const handleProfilePicChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = reader.result;
+      setProfilePic(base64);
+      await updateDoc(doc(db, "users", currentUser.uid), { profilePic: base64 });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // ✅ Delete picture
+  const handleDeletePic = async () => {
+    await updateDoc(doc(db, "users", currentUser.uid), { profilePic: "" });
+    setProfilePic("");
+  };
 
   // 🔹 Fetch emergency contacts from Firestore
   useEffect(() => {
@@ -46,8 +90,6 @@ const HomePage = ({ currentUser, setCurrentPage }) => {
         ...doc.data(),
       }));
       setContacts(contactList);
-
-      // ✅ Save to localStorage for instant SOS access
       localStorage.setItem("emergencyContacts", JSON.stringify(contactList));
     };
     fetchContacts();
@@ -74,11 +116,7 @@ const HomePage = ({ currentUser, setCurrentPage }) => {
     const addedContact = { id: docRef.id, ...newContact };
     const updatedContacts = [...contacts, addedContact];
     setContacts(updatedContacts);
-
-    // ✅ Cache updated contact list locally
     localStorage.setItem("emergencyContacts", JSON.stringify(updatedContacts));
-
-    // Reset input
     setNewContact({ name: "", phone: "", priority: false });
   };
 
@@ -87,8 +125,6 @@ const HomePage = ({ currentUser, setCurrentPage }) => {
     await deleteDoc(doc(db, "users", currentUser.uid, "emergencyContacts", id));
     const updatedContacts = contacts.filter((c) => c.id !== id);
     setContacts(updatedContacts);
-
-    // ✅ Update cache after delete
     localStorage.setItem("emergencyContacts", JSON.stringify(updatedContacts));
   };
 
@@ -153,7 +189,7 @@ const HomePage = ({ currentUser, setCurrentPage }) => {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto px-6 py-8 relative">
       {/* --- Title --- */}
       <div className="mb-8">
         <h2 className="text-3xl font-bold text-gray-800 mb-2">
@@ -165,76 +201,64 @@ const HomePage = ({ currentUser, setCurrentPage }) => {
       </div>
 
       {/* --- Features Grid --- */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {features.map((feature) => (
-          <button
-            key={feature.id}
-            onClick={() => setCurrentPage(feature.id)}
-            className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all transform hover:-translate-y-2 text-left group"
-          >
-            <div
-              className={`bg-gradient-to-br ${feature.color} w-14 h-14 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg`}
+      <div className="relative flex flex-col lg:flex-row items-start justify-between gap-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 flex-grow pr-10">
+          {features.map((feature) => (
+            <button
+              key={feature.id}
+              onClick={() => setCurrentPage(feature.id)}
+              className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all transform hover:-translate-y-2 text-left group"
             >
-              <feature.icon className="w-7 h-7 text-white" />
-            </div>
-            <div className="flex items-start justify-between mb-2">
-              <h3 className="text-lg font-bold text-gray-800">
-                {feature.title}
-              </h3>
-              {feature.badge && (
-                <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
-                  {feature.badge}
-                </span>
-              )}
-            </div>
-            <p className="text-gray-600 text-sm mb-4">{feature.desc}</p>
-            <div className="flex items-center text-purple-600 text-sm font-medium group-hover:gap-2 transition-all">
-              <span>Open feature</span>
-              <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </button>
-        ))}
-      </div>
-
-      {/* --- System Status Cards --- */}
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-2xl border-2 border-green-200">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="font-semibold text-green-800">System Active</span>
-          </div>
-          <p className="text-sm text-gray-700">
-            All safety features operational
-          </p>
+              <div
+                className={`bg-gradient-to-br ${feature.color} w-14 h-14 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg`}
+              >
+                <feature.icon className="w-7 h-7 text-white" />
+              </div>
+              <div className="flex items-start justify-between mb-2">
+                <h3 className="text-lg font-bold text-gray-800">
+                  {feature.title}
+                </h3>
+                {feature.badge && (
+                  <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
+                    {feature.badge}
+                  </span>
+                )}
+              </div>
+              <p className="text-gray-600 text-sm mb-4">{feature.desc}</p>
+              <div className="flex items-center text-purple-600 text-sm font-medium group-hover:gap-2 transition-all">
+                <span>Open feature</span>
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </button>
+          ))}
         </div>
 
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-2xl border-2 border-blue-200">
-          <div className="flex items-center gap-3 mb-2">
-            <Shield className="w-5 h-5 text-blue-600" />
-            <span className="font-semibold text-blue-800">Protected 24/7</span>
-          </div>
-          <p className="text-sm text-gray-700">Round the clock monitoring</p>
-        </div>
-
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-2xl border-2 border-purple-200">
-          <div className="flex items-center gap-3 mb-2">
-            <Users className="w-5 h-5 text-purple-600" />
-            <span className="font-semibold text-purple-800">
-              Community Strong
-            </span>
-          </div>
-          <p className="text-sm text-gray-700">10,000+ active users</p>
+        {/* 🌸 AI Assistant 3D Woman (Right Side) */}
+        <div className="hidden sm:block w-[290px] mx-auto mt-4 drop-shadow-2xl animate-[gentleGlow_4s_ease-in-out_infinite]"
+>
+          <style>
+            {`
+              @keyframes gentleGlow {
+                0%, 100% { transform: scale(1); }
+                50% { transform: scale(1.05); }
+              }
+            `}
+          </style>
+          <img
+            src="/images/ai-assistant.png"
+            alt="AI Assistant"
+            className="w-[300px] h-auto drop-shadow-2xl animate-[gentleGlow_4s_ease-in-out_infinite]"
+          />
         </div>
       </div>
 
       {/* --- Emergency Contacts Section --- */}
-      <div className="mt-10 bg-white/70 backdrop-blur-lg rounded-2xl shadow-xl border border-gray-200 p-6">
+      <div className="mt-12 bg-white/70 backdrop-blur-lg rounded-2xl shadow-xl border border-gray-200 p-6">
         <h3 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
           <Star className="w-6 h-6 text-purple-600" />
           Add Priority Emergency Contacts
         </h3>
 
-        {/* Input Fields */}
         <div className="flex flex-col md:flex-row gap-3 mb-5">
           <input
             type="text"
@@ -272,7 +296,6 @@ const HomePage = ({ currentUser, setCurrentPage }) => {
           </button>
         </div>
 
-        {/* Contacts List */}
         {contacts.length === 0 ? (
           <p className="text-gray-500 text-sm">
             No emergency contacts added yet.
