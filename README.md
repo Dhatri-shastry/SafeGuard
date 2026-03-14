@@ -60,3 +60,7 @@ The goal of SafeGuard is to provide quick emergency assistance through real-time
 
 Dhatri S  
 GitHub: https://github.com/Dhatri-Shastry
+
+## 📸 Application Preview
+
+![SafeGuard images](images/project_outlook.png)
