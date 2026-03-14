@@ -63,4 +63,4 @@ GitHub: https://github.com/Dhatri-Shastry
 
 ## 📸 Application Preview
 
-![SafeGuard images](images/project_outlook.png)
+![Project Screenshot](public/images/project_outlook.png)
